@@ -9,24 +9,19 @@
  python 3.6.7 
  
      packages
-- Pandas
-- Numpy
-- Scikit-learn
-- Pandas-profiling
-- ANN
-- Streamlit
+        - Pandas
+        - Numpy
+        - Scikit-learn
+        - Pandas-profiling
+        - ANN
+        - Streamlit
 
-Installation with pip:
 
-```bash
+
 ```
-
-
 streamlit run app.py
 ```
 
-
-```
 ## Files
 - diabetes_prediction_pipeline.ipynb 
              Jupyter Notebook with all the workings 
