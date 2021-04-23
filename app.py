@@ -1,59 +1,125 @@
-import streamlit as st
+from flask_sqlalchemy import SQLAlchemy
+from flask_admin import Admin
+from flask_admin.contrib.sqla import ModelView
+import sqlalchemy
+from flask import Flask, render_template, abort, session, redirect, request
 import joblib
-import pandas as pd
-from PIL import Image
+import numpy as np
+
+app = Flask(__name__)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root@localhost/Diabetes_app"
+app.config["SECRET_KEY"] = "mysecretkeywhichissupposedtobesecret"
+
+db = SQLAlchemy(app)
+admin = Admin(app)
 
 
-@st.cache(allow_output_mutation=True)
-def load(scaler_path, model_path):
-    sc = joblib.load(scaler_path)
-    model = joblib.load(model_path)
-    return sc, model
+class Posts(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    first_name = db.Column(db.String(255))
+    last_name = db.Column(db.String(255))
+    Comment = db.Column(db.Text)
+    lab_result = db.Column(db.String(255))
+    date_posted = db.Column(db.DateTime)
+    Dr_Sign = db.Column(db.String(255))
 
 
-def inference(row, scaler, model, feat_cols):
-    df = pd.DataFrame([row], columns=feat_cols)
-    X = scaler.transform(df)
-    features = pd.DataFrame(X, columns=feat_cols)
-    if model.predict(features) == 0:
-        return "This is a healthy person!"
-    else:
-        return "This person has high chances of having diabetics!"
+# db.create_all()
 
 
-st.title("Diabetes Prediction App")
-st.write(
-    "The data for is originally from the National Institute of Diabetes and Digestive and Kidney Diseases ."
-)
-image = Image.open("data/diabetes_image.jpg")
-st.image(image, use_column_width=True)
-st.write(
-    "Please fill in the details of the person under consideration in the left sidebar and click on the button below!"
-)
+class SecureModelView(ModelView):
+    def is_accessible(self):
+        if "logged_in" in session:
+            return True
+        else:
+            abort(403)
 
-age = st.sidebar.number_input("Age in Years", 1, 150, 25, 1)
-pregnancies = st.sidebar.number_input("Number of Pregnancies", 0, 20, 0, 1)
-glucose = st.sidebar.slider("Glucose Level", 0, 200, 25, 1)
-skinthickness = st.sidebar.slider("Skin Thickness", 0, 99, 20, 1)
-bloodpressure = st.sidebar.slider("Blood Pressure", 0, 122, 69, 1)
-insulin = st.sidebar.slider("Insulin", 0, 846, 79, 1)
-bmi = st.sidebar.slider("BMI", 0.0, 67.1, 31.4, 0.1)
-dpf = st.sidebar.slider("Diabetics Pedigree Function", 0.000, 2.420, 0.471, 0.001)
 
-row = [pregnancies, glucose, bloodpressure, skinthickness, insulin, bmi, dpf, age]
+admin.add_view(SecureModelView(Posts, db.session))
 
-if st.button("Find Health Status"):
-    feat_cols = [
-        "Pregnancies",
-        "Glucose",
-        "BloodPressure",
-        "SkinThickness",
-        "Insulin",
-        "BMI",
-        "DiabetesPedigreeFunction",
-        "Age",
-    ]
 
-    sc, model = load("models/scaler.joblib", "models/model.joblib")
-    result = inference(row, sc, model, feat_cols)
-    st.write(result)
+model = joblib.load("model.pkl")
+
+
+@app.route("/")
+def host():
+    return render_template("index.html")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        if (
+            request.form.get("username") == "oscar"
+            and request.form.get("password") == "admin123"
+        ):
+            session["logged_in"] = True
+            return redirect("/admin")
+        else:
+            return render_template("login.html", failed=True)
+    return render_template("login.html")
+
+
+@app.route("/home")
+def home():
+    return render_template("home.html")
+
+
+@app.route("/about_diabetes")
+def about_diabetes():
+    return render_template("about_diabetes.html")
+
+
+@app.route("/working")
+def working():
+    return render_template("working.html")
+
+
+@app.route("/userinput")
+def input():
+    return render_template("userinput.html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
+
+
+@app.route("/userinput", methods=["POST"])
+def predict():
+    if request.method == "POST":
+        pregnancies = int(request.form["pregnancies"])
+        glucose = int(request.form["glucose"])
+        blood_pressure = int(request.form["blood_pressure"])
+        skin_thickness = int(request.form["skin_thickness"])
+        insulin = int(request.form["insulin"])
+        BMI = float(request.form["BMI"])
+        DPF = float(request.form["DPF"])
+        age = int(request.form["age"])
+        data = np.array(
+            [
+                [
+                    pregnancies,
+                    glucose,
+                    blood_pressure,
+                    skin_thickness,
+                    insulin,
+                    BMI,
+                    DPF,
+                    age,
+                ]
+            ]
+        )
+
+        answer = model.predict(data)
+
+        if answer == 0:
+            return render_template("congratulations.html")
+
+        else:
+            return render_template("alert.html")
+
+
+app.run(debug=True)
